@@ -353,6 +353,29 @@ textarea:focus {
     flex: 1;
 }
 
+.modal-search {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background-color: var(--bg-color);
+}
+
+.modal-search input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    background-color: var(--surface);
+    color: var(--text-main);
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.modal-search input:focus {
+    border-color: var(--primary);
+}
+
 .file-list {
     flex: 1;
     overflow-y: auto;

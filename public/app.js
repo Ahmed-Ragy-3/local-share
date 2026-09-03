@@ -16,7 +16,9 @@ const closeBrowserBtn = document.getElementById('close-browser-btn');
 const upDirBtn = document.getElementById('up-dir-btn');
 const currentPathEl = document.getElementById('current-path');
 const fileListEl = document.getElementById('file-list');
+const pcBrowserSearch = document.getElementById('pc-browser-search');
 let currentBrowserPath = '';
+let currentDirectoryItems = [];
 
 // Auto-resize textarea
 messageInput.addEventListener('input', function() {
@@ -105,6 +107,16 @@ upDirBtn.addEventListener('click', () => {
             });
     }
 });
+
+if (pcBrowserSearch) {
+    pcBrowserSearch.addEventListener('input', (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        const filteredItems = currentDirectoryItems.filter(item => 
+            item.name.toLowerCase().includes(searchTerm)
+        );
+        renderFileList(filteredItems);
+    });
+}
 
 // Drag and drop
 document.addEventListener('dragover', (e) => {
@@ -249,7 +261,9 @@ function loadDirectory(dirPath) {
             }
             currentBrowserPath = data.currentDir;
             currentPathEl.textContent = data.currentDir;
-            renderFileList(data.items);
+            currentDirectoryItems = data.items;
+            if (pcBrowserSearch) pcBrowserSearch.value = '';
+            renderFileList(currentDirectoryItems);
         })
         .catch(err => console.error(err));
 }
