@@ -6,8 +6,17 @@ const messageInput = document.getElementById('message-input');
 const sendBtn = document.getElementById('send-btn');
 const fileInput = document.getElementById('file-input');
 const fileBtn = document.getElementById('file-btn');
+const browsePcBtn = document.getElementById('browse-pc-btn');
 const statusDot = document.getElementById('status-dot');
 const statusText = document.getElementById('status-text');
+
+// PC Browser UI Elements
+const pcBrowserModal = document.getElementById('pc-browser-modal');
+const closeBrowserBtn = document.getElementById('close-browser-btn');
+const upDirBtn = document.getElementById('up-dir-btn');
+const currentPathEl = document.getElementById('current-path');
+const fileListEl = document.getElementById('file-list');
+let currentBrowserPath = '';
 
 // Auto-resize textarea
 messageInput.addEventListener('input', function() {
@@ -30,6 +39,20 @@ socket.on('disconnect', () => {
 
 socket.on('user_count', (count) => {
     statusText.textContent = `Connected (${count})`;
+});
+
+socket.on('message_history', (history) => {
+    const systemMsg = messagesContainer.querySelector('.system-message');
+    messagesContainer.innerHTML = '';
+    if (systemMsg) messagesContainer.appendChild(systemMsg);
+    
+    history.forEach(item => {
+        if (item.type === 'text') {
+            appendMessage(item.msg, 'received');
+        } else if (item.type === 'file') {
+            appendFileMessage(item.fileInfo, 'received');
+        }
+    });
 });
 
 socket.on('chat_message', (msg) => {
@@ -61,6 +84,25 @@ fileInput.addEventListener('change', () => {
             uploadFile(files[i]);
         }
         fileInput.value = ''; // Reset
+    }
+});
+
+browsePcBtn.addEventListener('click', () => {
+    pcBrowserModal.classList.remove('hidden');
+    loadDirectory('');
+});
+
+closeBrowserBtn.addEventListener('click', () => {
+    pcBrowserModal.classList.add('hidden');
+});
+
+upDirBtn.addEventListener('click', () => {
+    if (currentBrowserPath) {
+        fetch(`/api/files?dir=${encodeURIComponent(currentBrowserPath)}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.parentDir) loadDirectory(data.parentDir);
+            });
     }
 });
 
@@ -195,4 +237,63 @@ function appendFileMessage(fileInfo, type) {
 
 function scrollToBottom() {
     chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function loadDirectory(dirPath) {
+    fetch(`/api/files${dirPath ? `?dir=${encodeURIComponent(dirPath)}` : ''}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+            currentBrowserPath = data.currentDir;
+            currentPathEl.textContent = data.currentDir;
+            renderFileList(data.items);
+        })
+        .catch(err => console.error(err));
+}
+
+function renderFileList(items) {
+    fileListEl.innerHTML = '';
+    items.forEach(item => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'file-item';
+        
+        const icon = document.createElement('div');
+        icon.className = 'file-item-icon';
+        icon.textContent = item.isDirectory ? '📁' : '📄';
+        
+        const name = document.createElement('div');
+        name.className = 'file-item-name';
+        name.textContent = item.name;
+        name.title = item.name;
+        
+        itemDiv.appendChild(icon);
+        itemDiv.appendChild(name);
+        
+        itemDiv.addEventListener('click', () => {
+            if (item.isDirectory) {
+                loadDirectory(item.path);
+            } else {
+                sharePcFile(item.path, item.name);
+            }
+        });
+        
+        fileListEl.appendChild(itemDiv);
+    });
+}
+
+function sharePcFile(filePath, fileName) {
+    const fileInfo = {
+        originalName: fileName,
+        filename: fileName,
+        size: 0,
+        mimetype: '',
+        downloadUrl: `/api/download-pc-file?path=${encodeURIComponent(filePath)}`
+    };
+    
+    appendFileMessage(fileInfo, 'sent');
+    socket.emit('file_shared', fileInfo);
+    pcBrowserModal.classList.add('hidden');
 }

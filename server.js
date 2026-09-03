@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const ip = require('ip');
+const os = require('os');
 
 const app = express();
 const server = http.createServer(app);
@@ -42,10 +43,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/download', express.static(UPLOAD_DIR));
 
 let connectedUsers = 0;
+const messageHistory = [];
 
 io.on('connection', (socket) => {
     connectedUsers++;
     io.emit('user_count', connectedUsers);
+    
+    // Send message history to the newly connected client
+    socket.emit('message_history', messageHistory);
 
     socket.on('disconnect', () => {
         connectedUsers--;
@@ -53,11 +58,15 @@ io.on('connection', (socket) => {
     });
 
     socket.on('chat_message', (msg) => {
+        // Store in history
+        messageHistory.push({ type: 'text', msg });
         // Broadcast the message to all other connected clients
         socket.broadcast.emit('chat_message', msg);
     });
 
     socket.on('file_shared', (fileInfo) => {
+        // Store in history
+        messageHistory.push({ type: 'file', fileInfo });
         // Broadcast file info to other clients
         socket.broadcast.emit('file_shared', fileInfo);
     });
@@ -78,6 +87,63 @@ app.post('/upload', upload.single('file'), (req, res) => {
     };
     
     res.json(fileInfo);
+});
+
+// PC File Navigation endpoint
+app.get('/api/files', (req, res) => {
+    let targetDir = req.query.dir || os.homedir();
+    
+    try {
+        if (!fs.existsSync(targetDir)) {
+            return res.status(404).json({ error: 'Directory not found' });
+        }
+        
+        const items = fs.readdirSync(targetDir, { withFileTypes: true });
+        const result = [];
+        
+        for (const item of items) {
+            try {
+                result.push({
+                    name: item.name,
+                    isDirectory: item.isDirectory(),
+                    path: path.join(targetDir, item.name)
+                });
+            } catch (e) {
+                // Ignore items we can't access
+            }
+        }
+        
+        // Sort: directories first, then alphabetically
+        result.sort((a, b) => {
+            if (a.isDirectory && !b.isDirectory) return -1;
+            if (!a.isDirectory && b.isDirectory) return 1;
+            return a.name.localeCompare(b.name);
+        });
+        
+        res.json({
+            currentDir: targetDir,
+            parentDir: path.dirname(targetDir),
+            items: result
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to read directory' });
+    }
+});
+
+// PC File Download endpoint
+app.get('/api/download-pc-file', (req, res) => {
+    const filePath = req.query.path;
+    
+    if (!filePath || !fs.existsSync(filePath)) {
+        return res.status(404).send('File not found');
+    }
+    
+    const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+        return res.status(400).send('Cannot download a directory');
+    }
+    
+    res.download(filePath);
 });
 
 server.listen(PORT, '0.0.0.0', () => {
