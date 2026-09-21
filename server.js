@@ -91,7 +91,7 @@ app.post('/upload', upload.single('file'), (req, res) => {
 
 // PC File Navigation endpoint
 app.get('/api/files', (req, res) => {
-    let targetDir = req.query.dir || os.homedir();
+    let targetDir = req.query.dir || 'C:\\COLLEGE\\Term_9';
     
     try {
         if (!fs.existsSync(targetDir)) {

@@ -9,6 +9,7 @@ const fileBtn = document.getElementById('file-btn');
 const browsePcBtn = document.getElementById('browse-pc-btn');
 const statusDot = document.getElementById('status-dot');
 const statusText = document.getElementById('status-text');
+const pasteBtn = document.getElementById('paste-btn');
 
 // PC Browser UI Elements
 const pcBrowserModal = document.getElementById('pc-browser-modal');
@@ -17,8 +18,12 @@ const upDirBtn = document.getElementById('up-dir-btn');
 const currentPathEl = document.getElementById('current-path');
 const fileListEl = document.getElementById('file-list');
 const pcBrowserSearch = document.getElementById('pc-browser-search');
+const modalFooter = document.getElementById('modal-footer');
+const selectedCountEl = document.getElementById('selected-count');
+const sendSelectedBtn = document.getElementById('send-selected-btn');
 let currentBrowserPath = '';
 let currentDirectoryItems = [];
+let selectedFiles = new Set();
 
 // Auto-resize textarea
 messageInput.addEventListener('input', function() {
@@ -131,6 +136,48 @@ document.addEventListener('drop', (e) => {
     }
 });
 
+if (pasteBtn) {
+    pasteBtn.addEventListener('click', async () => {
+        try {
+            if (navigator.clipboard && navigator.clipboard.readText) {
+                const text = await navigator.clipboard.readText();
+                messageInput.value += text;
+                messageInput.style.height = 'auto';
+                messageInput.style.height = (messageInput.scrollHeight) + 'px';
+                messageInput.focus();
+            } else {
+                alert('Your browser does not support clipboard reading directly. Please tap the input field and use your device\'s native paste option.');
+            }
+        } catch (err) {
+            console.error('Failed to read clipboard text: ', err);
+            alert('Could not paste. Please tap the input field and use your device\'s paste option.');
+        }
+    });
+}
+
+messageInput.addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (let index in items) {
+        const item = items[index];
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+            const blob = item.getAsFile();
+            const file = new File([blob], `image-${Date.now()}.png`, { type: blob.type });
+            uploadFile(file);
+        }
+    }
+});
+
+if (sendSelectedBtn) {
+    sendSelectedBtn.addEventListener('click', () => {
+        selectedFiles.forEach(file => {
+            sharePcFile(file.path, file.name);
+        });
+        selectedFiles.clear();
+        updateModalFooter();
+        pcBrowserModal.classList.add('hidden');
+    });
+}
+
 // Functions
 function sendMessage() {
     const text = messageInput.value.trim();
@@ -142,11 +189,62 @@ function sendMessage() {
     }
 }
 
+function linkifyAndSanitize(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    let html = div.innerHTML;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return html.replace(urlRegex, function(url) {
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+    });
+}
+
 function appendMessage(text, type) {
     const msgDiv = document.createElement('div');
     msgDiv.classList.add('message', type);
-    // Basic sanitization by using textContent
-    msgDiv.textContent = text;
+    
+    const copyBtnHtml = `
+        <button class="message-copy-btn" title="Copy message">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+        </button>
+    `;
+    
+    msgDiv.innerHTML = copyBtnHtml + `<span>${linkifyAndSanitize(text)}</span>`;
+    
+    const copyBtn = msgDiv.querySelector('.message-copy-btn');
+    if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    copyBtn.style.opacity = '1';
+                    setTimeout(() => copyBtn.style.opacity = '', 1000);
+                }).catch(err => {
+                    console.error('Failed to copy', err);
+                    alert('Failed to copy message');
+                });
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.style.position = "fixed";
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    copyBtn.style.opacity = '1';
+                    setTimeout(() => copyBtn.style.opacity = '', 1000);
+                } catch (err) {
+                    console.error('Fallback copy failed', err);
+                    alert('Failed to copy message');
+                }
+                document.body.removeChild(textArea);
+            }
+        });
+    }
+
     messagesContainer.appendChild(msgDiv);
     scrollToBottom();
 }
@@ -268,29 +366,64 @@ function loadDirectory(dirPath) {
         .catch(err => console.error(err));
 }
 
+function updateModalFooter() {
+    if (!modalFooter) return;
+    if (selectedFiles.size > 0) {
+        modalFooter.classList.remove('hidden');
+        selectedCountEl.textContent = `${selectedFiles.size} file(s) selected`;
+    } else {
+        modalFooter.classList.add('hidden');
+    }
+}
+
 function renderFileList(items) {
     fileListEl.innerHTML = '';
+    selectedFiles.clear();
+    updateModalFooter();
+    
     items.forEach(item => {
         const itemDiv = document.createElement('div');
         itemDiv.className = 'file-item';
         
-        const icon = document.createElement('div');
-        icon.className = 'file-item-icon';
-        icon.textContent = item.isDirectory ? '📁' : '📄';
+        let checkboxHtml = '';
+        if (!item.isDirectory) {
+            checkboxHtml = `<input type="checkbox" class="file-checkbox" value="${item.path}">`;
+        }
         
-        const name = document.createElement('div');
-        name.className = 'file-item-name';
-        name.textContent = item.name;
-        name.title = item.name;
+        itemDiv.innerHTML = `
+            ${checkboxHtml}
+            <div class="file-item-icon">${item.isDirectory ? '📁' : '📄'}</div>
+            <div class="file-item-name" title="${item.name}">${item.name}</div>
+        `;
         
-        itemDiv.appendChild(icon);
-        itemDiv.appendChild(name);
+        const checkbox = itemDiv.querySelector('.file-checkbox');
+        if (checkbox) {
+            checkbox.addEventListener('change', (e) => {
+                e.stopPropagation();
+                if (e.target.checked) {
+                    selectedFiles.add({ path: item.path, name: item.name });
+                } else {
+                    for (let f of selectedFiles) {
+                        if (f.path === item.path) {
+                            selectedFiles.delete(f);
+                            break;
+                        }
+                    }
+                }
+                updateModalFooter();
+            });
+        }
         
-        itemDiv.addEventListener('click', () => {
+        itemDiv.addEventListener('click', (e) => {
+            if (e.target.type === 'checkbox') return;
+            
             if (item.isDirectory) {
                 loadDirectory(item.path);
             } else {
-                sharePcFile(item.path, item.name);
+                if (checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                    checkbox.dispatchEvent(new Event('change'));
+                }
             }
         });
         
@@ -309,5 +442,4 @@ function sharePcFile(filePath, fileName) {
     
     appendFileMessage(fileInfo, 'sent');
     socket.emit('file_shared', fileInfo);
-    pcBrowserModal.classList.add('hidden');
 }
