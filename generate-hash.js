@@ -13,12 +13,9 @@ if (!password) {
 const saltRounds = 10;
 const hash = bcrypt.hashSync(password, saltRounds);
 
-console.log('\n==================================================');
 console.log('Password Hash Generated Successfully!');
-console.log('==================================================');
 console.log(`Password: ${password}`);
 console.log(`Bcrypt Hash: ${hash}`);
-console.log('==================================================\n');
 
 const envPath = path.join(__dirname, '.env');
 const jwtSecret = require('crypto').randomBytes(32).toString('hex');

@@ -303,9 +303,7 @@ server.listen(PORT, '0.0.0.0', () => {
     const localUrl = `http://localhost:${PORT}`;
     const lanUrl = `http://${ip.address()}:${PORT}`;
     
-    console.log('\n==================================================');
-    console.log(' Local Share is running!');
-    console.log('==================================================');
+    console.log(' Local Share is running!\n');
     console.log(` Local: ${localUrl}`);
     console.log(` LAN:   ${lanUrl}`);
     if (process.env.PASSWORD_HASH) {
@@ -314,5 +312,4 @@ server.listen(PORT, '0.0.0.0', () => {
         console.log(' Remote Auth: ⚠️  PASSWORD_HASH not set in .env.');
         console.log(' Run: node generate-hash.js <password> to enable Remote Auth.');
     }
-    console.log('==================================================\n');
 });
