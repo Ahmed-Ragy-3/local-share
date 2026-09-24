@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap');
+
 :root {
     --primary: #6366f1;
     --primary-hover: #4f46e5;
@@ -171,6 +173,7 @@ body {
     padding: 14px 18px;
     border-radius: 20px;
     word-break: break-word;
+    font-family: 'Roboto Mono', monospace;
     font-size: 0.95rem;
     line-height: 1.5;
     box-shadow: var(--shadow-sm);
