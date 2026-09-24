@@ -225,7 +225,9 @@ function linkifyAndSanitize(text) {
     const div = document.createElement('div');
     div.textContent = text;
     let html = div.innerHTML;
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    // Preserve newlines and tabs before linkifying
+    html = html.replace(/\n/g, '<br>').replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
+    const urlRegex = /(https?:\/\/[^\s<]+)/g;
     return html.replace(urlRegex, function(url) {
         return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
     });
@@ -244,7 +246,7 @@ function appendMessage(text, type) {
         </button>
     `;
     
-    msgDiv.innerHTML = copyBtnHtml + `<span>${linkifyAndSanitize(text)}</span>`;
+    msgDiv.innerHTML = copyBtnHtml + `<span style="white-space: pre-wrap; word-break: break-word;">${linkifyAndSanitize(text)}</span>`;
     
     const copyBtn = msgDiv.querySelector('.message-copy-btn');
     if (copyBtn) {
