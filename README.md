@@ -1,42 +1,67 @@
 # Local Share
 
-A lightweight local network file and message sharing application designed for simplicity and speed. Transfer files and send text messages directly between your laptop and phone without the cloud or internet.
+A lightweight local network file and message sharing application with secure public remote access via Ngrok and GitHub Pages. Transfer files, browse PC files, and send text messages directly between devices over LAN or remotely.
 
-## Features
-- **Real-time Messaging**: Instantly send and receive text messages between devices.
-- **Fast File Transfer**: Directly transfer files via HTTP streaming (no base64 encoding).
-- **Progress Indicator**: View upload progress for larger files.
-- **No Internet Required**: Works entirely on your Local Area Network (LAN).
-- **Zero Configuration**: No accounts, databases, or complex setup needed.
+---
 
-## Installation
+## 🌟 Features
+- **Real-time Messaging**: Instantly send and receive text messages between connected devices.
+- **Fast File Transfer**: Directly upload & stream files (supports files up to 1GB).
+- **PC File Navigation**: Browse and download files directly from host PC folders.
+- **LAN Access**: Bypasses authentication automatically for devices on the same local Wi-Fi.
+- **Secure Remote Access (Ngrok & GitHub Pages)**: Access your local share page from anywhere using Ngrok, protected with Bcrypt password hashing & JWT tokens.
 
-1. Make sure you have [Node.js](https://nodejs.org/) installed.
-2. Clone or download this project.
-3. Open a terminal in the project directory and run:
+---
+
+## 🚀 Installation & Setup
+
+1. **Install Dependencies**:
    ```bash
-   npm install
+   cmd /c npm install
    ```
 
-## Usage
+2. **Generate Password Hash for Remote Access**:
+   Run the hash generator script with your desired secret password:
+   ```bash
+   node generate-hash.js your_secret_password
+   ```
+   *This automatically creates/updates your `.env` file (which is ignored by Git in `.gitignore`).*
 
-1. Start the server:
+3. **Start the Local Share Server**:
    ```bash
    npm start
    ```
-2. The terminal will output two URLs:
-   - **Local URL** (e.g., `http://localhost:3000`): Use this on the computer running the server.
-   - **LAN URL** (e.g., `http://192.168.1.5:3000`): Use this on your phone or other devices connected to the same Wi-Fi network.
-3. Open the LAN URL in your phone's web browser.
-4. Start chatting and sharing files!
 
-## Troubleshooting
+---
 
-- **Cannot access from phone**: Ensure both devices are connected to the exact same Wi-Fi network. Check if your laptop's firewall is blocking incoming connections on port `3000`. You may need to allow Node.js through the firewall.
-- **Port already in use**: If port 3000 is occupied, you can change it via environment variables:
-  - Windows: `set PORT=8080 && npm start`
-  - Linux/Mac: `PORT=8080 npm start`
+## 🌐 Setting Up Public Access via Ngrok & GitHub Pages
 
-## Technologies Used
-- Backend: Node.js, Express, Socket.io, Multer
-- Frontend: HTML5, Vanilla JavaScript, CSS3
+### Step 1: Start Ngrok Tunnel on your PC
+Make sure [Ngrok](https://ngrok.com/) is installed, then run:
+```bash
+ngrok http 3000
+```
+Copy your public Ngrok URL (e.g., `https://xxxx-xx-xx.ngrok-free.app`).
+
+### Step 2: Deploy Password Portal to GitHub Pages
+1. Upload the `index.html` file inside the `github-pages/` directory to a new public repository on GitHub (e.g., `local-share-portal`).
+2. Enable GitHub Pages in your repo settings (**Settings > Pages > Source: main branch**).
+3. Open your GitHub Pages link on any phone or remote device outside your local network.
+
+### Step 3: Connect!
+1. Open your GitHub Pages portal.
+2. Enter your **Ngrok URL** and your **Password**.
+3. Upon successful password validation, you will be redirected straight to your Local Share app on your home PC!
+
+---
+
+## 🔒 Security
+- **Bcrypt Hashing**: Password hash is stored securely in `.env` and excluded from source control (`.gitignore`).
+- **JWT Authorization**: Session tokens are cryptographically signed.
+- **LAN Bypass**: Local devices on Wi-Fi do not require entering password every time.
+
+---
+
+## 🛠️ Tech Stack
+- **Backend**: Node.js, Express, Socket.IO, Multer, BcryptJS, JSONWebToken, Dotenv
+- **Frontend**: HTML5, Vanilla JavaScript, Vanilla CSS

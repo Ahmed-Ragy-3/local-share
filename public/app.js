@@ -1,4 +1,21 @@
-const socket = io();
+// Token handling from URL query or LocalStorage
+const urlParams = new URLSearchParams(window.location.search);
+let authToken = urlParams.get('token');
+
+if (authToken) {
+    localStorage.setItem('local_share_token', authToken);
+    // Remove token from address bar for cleanliness
+    const newUrl = window.location.pathname;
+    window.history.replaceState({}, document.title, newUrl);
+} else {
+    authToken = localStorage.getItem('local_share_token');
+}
+
+// Initialize Socket.io with Auth Token
+const socket = io({
+    auth: { token: authToken },
+    query: { token: authToken }
+});
 
 const chatContainer = document.getElementById('chat-container');
 const messagesContainer = document.getElementById('messages');
@@ -42,6 +59,17 @@ socket.on('disconnect', () => {
     statusDot.classList.remove('connected');
     statusDot.classList.add('disconnected');
     statusText.textContent = 'Disconnected';
+});
+
+socket.on('connect_error', (err) => {
+    statusDot.classList.remove('connected');
+    statusDot.classList.add('disconnected');
+    statusText.textContent = 'Auth Error';
+    if (err.message && err.message.includes('Authentication required')) {
+        // Clear invalid token and prompt re-auth if needed
+        localStorage.removeItem('local_share_token');
+        window.location.reload();
+    }
 });
 
 socket.on('user_count', (count) => {
@@ -105,7 +133,11 @@ closeBrowserBtn.addEventListener('click', () => {
 
 upDirBtn.addEventListener('click', () => {
     if (currentBrowserPath) {
-        fetch(`/api/files?dir=${encodeURIComponent(currentBrowserPath)}`)
+        const queryDir = encodeURIComponent(currentBrowserPath);
+        const queryToken = authToken ? `&token=${encodeURIComponent(authToken)}` : '';
+        fetch(`/api/files?dir=${queryDir}${queryToken}`, {
+            headers: authToken ? { 'Authorization': `Bearer ${authToken}`, 'ngrok-skip-browser-warning': 'true' } : { 'ngrok-skip-browser-warning': 'true' }
+        })
             .then(res => res.json())
             .then(data => {
                 if (data.parentDir) loadDirectory(data.parentDir);
@@ -226,7 +258,6 @@ function appendMessage(text, type) {
                     alert('Failed to copy message');
                 });
             } else {
-                // Fallback for older browsers
                 const textArea = document.createElement("textarea");
                 textArea.value = text;
                 textArea.style.position = "fixed";
@@ -259,10 +290,10 @@ function formatBytes(bytes, decimals = 2) {
 }
 
 function getFileIcon(mimetype) {
-    if (mimetype.startsWith('image/')) return '🖼️';
-    if (mimetype.startsWith('video/')) return '🎥';
-    if (mimetype.startsWith('audio/')) return '🎵';
-    if (mimetype.includes('pdf')) return '📄';
+    if (mimetype && mimetype.startsWith('image/')) return '🖼️';
+    if (mimetype && mimetype.startsWith('video/')) return '🎥';
+    if (mimetype && mimetype.startsWith('audio/')) return '🎵';
+    if (mimetype && mimetype.includes('pdf')) return '📄';
     return '📎';
 }
 
@@ -294,7 +325,13 @@ function uploadFile(file) {
     const statusTextEl = msgDiv.querySelector('.status-text');
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/upload', true);
+    const uploadUrl = authToken ? `/upload?token=${encodeURIComponent(authToken)}` : '/upload';
+    xhr.open('POST', uploadUrl, true);
+    
+    if (authToken) {
+        xhr.setRequestHeader('Authorization', `Bearer ${authToken}`);
+    }
+    xhr.setRequestHeader('ngrok-skip-browser-warning', 'true');
 
     xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
@@ -310,7 +347,6 @@ function uploadFile(file) {
             progressBar.parentElement.style.display = 'none';
             statusTextEl.innerHTML = '✓ Sent';
             
-            // Notify others
             socket.emit('file_shared', fileInfo);
         } else {
             statusTextEl.textContent = '✗ Upload failed';
@@ -330,6 +366,12 @@ function appendFileMessage(fileInfo, type) {
     const msgDiv = document.createElement('div');
     msgDiv.classList.add('message', type, 'file-message');
     
+    let downloadUrl = fileInfo.downloadUrl;
+    if (authToken && !downloadUrl.includes('token=')) {
+        const joinChar = downloadUrl.includes('?') ? '&' : '?';
+        downloadUrl += `${joinChar}token=${encodeURIComponent(authToken)}`;
+    }
+
     msgDiv.innerHTML = `
         <div class="file-info">
             <span class="file-icon">${getFileIcon(fileInfo.mimetype || '')}</span>
@@ -338,7 +380,7 @@ function appendFileMessage(fileInfo, type) {
                 <span class="file-size">${formatBytes(fileInfo.size)}</span>
             </div>
         </div>
-        <a href="${fileInfo.downloadUrl}" class="download-link" download="${fileInfo.originalName}" target="_blank">Download</a>
+        <a href="${downloadUrl}" class="download-link" download="${fileInfo.originalName}" target="_blank">Download</a>
     `;
     
     messagesContainer.appendChild(msgDiv);
@@ -350,7 +392,14 @@ function scrollToBottom() {
 }
 
 function loadDirectory(dirPath) {
-    fetch(`/api/files${dirPath ? `?dir=${encodeURIComponent(dirPath)}` : ''}`)
+    let url = `/api/files?dir=${encodeURIComponent(dirPath)}`;
+    if (authToken) {
+        url += `&token=${encodeURIComponent(authToken)}`;
+    }
+
+    fetch(url, {
+        headers: authToken ? { 'Authorization': `Bearer ${authToken}`, 'ngrok-skip-browser-warning': 'true' } : { 'ngrok-skip-browser-warning': 'true' }
+    })
         .then(res => res.json())
         .then(data => {
             if (data.error) {
@@ -432,12 +481,17 @@ function renderFileList(items) {
 }
 
 function sharePcFile(filePath, fileName) {
+    let downloadUrl = `/api/download-pc-file?path=${encodeURIComponent(filePath)}`;
+    if (authToken) {
+        downloadUrl += `&token=${encodeURIComponent(authToken)}`;
+    }
+
     const fileInfo = {
         originalName: fileName,
         filename: fileName,
         size: 0,
         mimetype: '',
-        downloadUrl: `/api/download-pc-file?path=${encodeURIComponent(filePath)}`
+        downloadUrl: downloadUrl
     };
     
     appendFileMessage(fileInfo, 'sent');
