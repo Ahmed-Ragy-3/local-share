@@ -303,7 +303,7 @@ server.listen(PORT, '0.0.0.0', () => {
     const localUrl = `http://localhost:${PORT}`;
     const lanUrl = `http://${ip.address()}:${PORT}`;
     
-    console.log(' Local Share is running!\n');
+    console.log('\n Local Share is running!\n');
     console.log(` Local: ${localUrl}`);
     console.log(` LAN:   ${lanUrl}`);
     if (process.env.PASSWORD_HASH) {
