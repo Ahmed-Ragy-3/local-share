@@ -249,23 +249,16 @@
                     </svg>
                 </div>
                 <h1 class="brand-title">Local Share Remote</h1>
-                <p class="brand-subtitle">Enter your Ngrok URL and password to access your local PC</p>
+                <p class="brand-subtitle">Enter your password to access your local PC</p>
             </div>
 
             <div id="alert-box" class="alert-box"></div>
 
             <form id="auth-form">
                 <div class="form-group">
-                    <label class="form-label" for="ngrok-url">Ngrok Server URL</label>
-                    <div class="input-wrapper">
-                        <input type="url" id="ngrok-url" class="form-input" placeholder="https://xxxx-xx-xx.ngrok-free.app" required>
-                    </div>
-                </div>
-
-                <div class="form-group">
                     <label class="form-label" for="password">Password</label>
                     <div class="input-wrapper">
-                        <input type="password" id="password" class="form-input has-toggle" placeholder="Enter password" required>
+                        <input type="password" id="password" class="form-input has-toggle" placeholder="Enter password" required autofocus>
                         <button type="button" class="toggle-pw" id="toggle-pw" title="Show/Hide Password">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -289,7 +282,6 @@
 
     <script>
         const form = document.getElementById('auth-form');
-        const ngrokUrlInput = document.getElementById('ngrok-url');
         const passwordInput = document.getElementById('password');
         const togglePw = document.getElementById('toggle-pw');
         const alertBox = document.getElementById('alert-box');
@@ -297,11 +289,10 @@
         const btnText = document.getElementById('btn-text');
         const spinner = document.getElementById('spinner');
 
-        // Load saved Ngrok URL if available
-        const savedNgrokUrl = localStorage.getItem('local_share_ngrok_url');
-        if (savedNgrokUrl) {
-            ngrokUrlInput.value = savedNgrokUrl;
-        }
+        // The ngrok URL is stored in localStorage after first connection.
+        // On first visit, it is fetched from /api/config on the server via the
+        // NGROK_URL set in .env — the user never needs to type it manually.
+        let serverUrl = localStorage.getItem('local_share_ngrok_url') || null;
 
         togglePw.addEventListener('click', () => {
             const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
@@ -314,17 +305,35 @@
             alertBox.style.display = 'block';
         }
 
+        // Fetch the ngrok URL from the server's public /api/config endpoint.
+        // This only works when this page is opened via a link that already contains
+        // the server URL as a query param (?server=https://xxxx.ngrok-free.app),
+        // OR when a previously saved URL exists in localStorage.
+        (async function resolveServerUrl() {
+            // 1. Check for ?server= query param (e.g. shared link)
+            const params = new URLSearchParams(window.location.search);
+            const paramUrl = params.get('server');
+            if (paramUrl) {
+                serverUrl = paramUrl.replace(/\/+$/, '');
+                localStorage.setItem('local_share_ngrok_url', serverUrl);
+                return;
+            }
+
+            // 2. Already have it in localStorage — done
+            if (serverUrl) return;
+
+            // 3. No URL known — show a helpful message
+            showAlert('No server URL configured. Open this page via the link your PC provides (e.g. shared via QR or messaging app).');
+            submitBtn.disabled = true;
+        })();
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            
-            let rawUrl = ngrokUrlInput.value.trim();
-            if (!rawUrl) return;
 
-            // Normalize URL format
-            if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
-                rawUrl = 'https://' + rawUrl;
+            if (!serverUrl) {
+                showAlert('Server URL is not configured. Open this page using the link from your PC.');
+                return;
             }
-            rawUrl = rawUrl.replace(/\/+$/, ''); // Strip trailing slashes
 
             const password = passwordInput.value.trim();
             if (!password) return;
@@ -335,10 +344,7 @@
             submitBtn.disabled = true;
 
             try {
-                // Save valid URL to localStorage
-                localStorage.setItem('local_share_ngrok_url', rawUrl);
-
-                const response = await fetch(`${rawUrl}/api/verify-password`, {
+                const response = await fetch(`${serverUrl}/api/verify-password`, {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
@@ -351,17 +357,15 @@
 
                 if (response.ok && data.success && data.token) {
                     showAlert('Password verified! Redirecting to Local Share...', true);
-                    
-                    // Redirect to Local Share on PC with authorization token
                     setTimeout(() => {
-                        window.location.href = `${rawUrl}/?token=${encodeURIComponent(data.token)}`;
+                        window.location.href = `${serverUrl}/?token=${encodeURIComponent(data.token)}`;
                     }, 800);
                 } else {
                     throw new Error(data.error || 'Incorrect password.');
                 }
             } catch (err) {
                 console.error('Connection failed:', err);
-                showAlert(err.message || 'Could not connect to Ngrok server. Verify your Ngrok URL and check if Local Share is running on your PC.');
+                showAlert(err.message || 'Could not connect. Check if Local Share is running on your PC.');
                 btnText.style.display = 'inline';
                 spinner.style.display = 'none';
                 submitBtn.disabled = false;

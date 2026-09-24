@@ -17,6 +17,9 @@ const server = http.createServer(app);
 // Secret for signing authentication tokens
 const JWT_SECRET = process.env.JWT_SECRET || 'local-share-default-secret-key-2026';
 
+// Ngrok tunnel URL (e.g. https://xxxx.ngrok-free.app) — set in .env to NGROK_URL
+const NGROK_URL = process.env.NGROK_URL ? process.env.NGROK_URL.replace(/\/+$/, '').toLowerCase() : null;
+
 // Enable CORS for all routes (needed for GitHub Pages to talk to Ngrok)
 app.use(cors({
     origin: '*',
@@ -38,14 +41,21 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 // Helper: Check if request originates from a local IP / local loopback
 function isLocalAddress(ipAddress, hostHeader) {
     if (!ipAddress) return false;
-    
-    // If request comes through ngrok or reverse proxy
+
+    // If a NGROK_URL is configured, treat any request whose host matches it as remote
+    if (NGROK_URL && hostHeader) {
+        const host = hostHeader.split(':')[0].toLowerCase(); // strip port if present
+        const ngrokHost = NGROK_URL.replace(/^https?:\/\//, '');
+        if (host === ngrokHost) return false;
+    }
+
+    // Fallback: treat any known reverse-proxy domain pattern as remote
     if (hostHeader && (hostHeader.includes('ngrok') || hostHeader.includes('loca.lt') || hostHeader.includes('trycloudflare.com'))) {
         return false;
     }
 
     const cleanIp = ipAddress.replace(/^.*:/, ''); // Handle IPv6 mapped IPv4
-    
+
     if (cleanIp === '127.0.0.1' || cleanIp === 'localhost' || ipAddress === '::1' || ipAddress === '::ffff:127.0.0.1') {
         return true;
     }
@@ -90,8 +100,9 @@ function extractToken(req) {
 
 // Authentication middleware for Express
 app.use((req, res, next) => {
-    // Allow public API endpoint for password verification
-    if (req.path === '/api/verify-password' || req.path === '/api/health') {
+    // Allow public API endpoints and static assets
+    const publicPaths = ['/api/verify-password', '/api/health', '/api/config', '/app.js', '/style.css'];
+    if (publicPaths.includes(req.path) || req.path.startsWith('/socket.io/')) {
         return next();
     }
 
@@ -180,6 +191,11 @@ app.post('/api/verify-password', (req, res) => {
 // Health check endpoint
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', server: 'Local Share' });
+});
+
+// Public config endpoint — exposes non-sensitive info (ngrok URL) to GitHub Pages login
+app.get('/api/config', (req, res) => {
+    res.json({ ngrokUrl: NGROK_URL || null });
 });
 
 let connectedUsers = 0;
@@ -311,5 +327,10 @@ server.listen(PORT, '0.0.0.0', () => {
     } else {
         console.log(' Remote Auth: ⚠️  PASSWORD_HASH not set in .env.');
         console.log(' Run: node generate-hash.js <password> to enable Remote Auth.');
+    }
+    if (NGROK_URL) {
+        console.log(` Ngrok URL:  ${NGROK_URL}`);
+    } else {
+        console.log(' Ngrok URL:  ⚠️  NGROK_URL not set in .env (using pattern-matching fallback).');
     }
 });
